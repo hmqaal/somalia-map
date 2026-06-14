@@ -1,0 +1,252 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Map from "react-map-gl/mapbox";
+import DeckGL from "@deck.gl/react";
+import { ScatterplotLayer, GeoJsonLayer } from "@deck.gl/layers";
+import Papa from "papaparse";
+import "mapbox-gl/dist/mapbox-gl.css";
+
+type Settlement = {
+  OBJECTID: string;
+  SETTLEMENT: string;
+  REG_NAME: string;
+  DIST_NAME: string;
+  X: number;
+  Y: number;
+  house_count: number;
+};
+
+export default function Home() {
+  const [settlements, setSettlements] = useState<Settlement[]>([]);
+  const [adm1, setAdm1] = useState<any>(null);
+  const [adm2, setAdm2] = useState<any>(null);
+  const [selectedRegion, setSelectedRegion] = useState("All");
+  const [selectedDistrict, setSelectedDistrict] = useState("All");
+  const [hoverInfo, setHoverInfo] = useState<any>(null);
+
+  useEffect(() => {
+    Papa.parse("/data/somalia_house_counts_by_settlement.csv", {
+      download: true,
+      header: true,
+      dynamicTyping: true,
+      complete: (result) => {
+        setSettlements(result.data as Settlement[]);
+      },
+    });
+
+    fetch("/data/geoBoundaries-SOM-ADM1_simplified.geojson")
+      .then((res) => res.json())
+      .then(setAdm1);
+
+    fetch("/data/geoBoundaries-SOM-ADM2_simplified.geojson")
+      .then((res) => res.json())
+      .then(setAdm2);
+  }, []);
+
+  const regions = useMemo(() => {
+    return ["All", ...Array.from(new Set(settlements.map((d) => d.REG_NAME))).sort()];
+  }, [settlements]);
+
+  const districts = useMemo(() => {
+    const filtered =
+      selectedRegion === "All"
+        ? settlements
+        : settlements.filter((d) => d.REG_NAME === selectedRegion);
+
+    return ["All", ...Array.from(new Set(filtered.map((d) => d.DIST_NAME))).sort()];
+  }, [settlements, selectedRegion]);
+
+  const filteredSettlements = useMemo(() => {
+    return settlements.filter((d) => {
+      const regionMatch = selectedRegion === "All" || d.REG_NAME === selectedRegion;
+      const districtMatch = selectedDistrict === "All" || d.DIST_NAME === selectedDistrict;
+      return regionMatch && districtMatch;
+    });
+  }, [settlements, selectedRegion, selectedDistrict]);
+
+  const totalHouses = filteredSettlements.reduce(
+    (sum, d) => sum + Number(d.house_count || 0),
+    0
+  );
+
+  const layers = [
+    adm1 &&
+      new GeoJsonLayer({
+        id: "adm1",
+        data: adm1,
+        stroked: true,
+        filled: false,
+        getLineWidth: 2,
+        getLineColor: [0, 0, 0, 180],
+        lineWidthMinPixels: 1,
+      }),
+
+    adm2 &&
+      new GeoJsonLayer({
+        id: "adm2",
+        data: adm2,
+        stroked: true,
+        filled: false,
+        getLineWidth: 1,
+        getLineColor: [80, 80, 80, 120],
+        lineWidthMinPixels: 1,
+      }),
+
+    new ScatterplotLayer({
+      id: "settlements",
+      data: filteredSettlements,
+      getPosition: (d: Settlement) => [Number(d.X), Number(d.Y)],
+      getRadius: (d: Settlement) =>
+        Math.max(80, Math.sqrt(Number(d.house_count || 0)) * 45),
+      getFillColor: [220, 60, 60, 160],
+      getLineColor: [255, 255, 255],
+      lineWidthMinPixels: 1,
+      pickable: true,
+      radiusUnits: "meters",
+      onHover: (info) => setHoverInfo(info.object ? info : null),
+    }),
+  ].filter(Boolean);
+
+  return (
+    <main className="h-screen w-screen relative">
+      <div className="absolute top-4 left-4 z-10 bg-white rounded-xl shadow-lg p-4 w-80 space-y-3">
+        <h1 className="text-xl font-bold">Somalia House Counts</h1>
+
+        <div>
+          <label className="text-sm font-semibold">Region</label>
+          <select
+            className="w-full border rounded p-2"
+            value={selectedRegion}
+            onChange={(e) => {
+              setSelectedRegion(e.target.value);
+              setSelectedDistrict("All");
+            }}
+          >
+            {regions.map((r) => (
+              <option key={r}>{r}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-sm font-semibold">District</label>
+          <select
+            className="w-full border rounded p-2"
+            value={selectedDistrict}
+            onChange={(e) => setSelectedDistrict(e.target.value)}
+          >
+            {districts.map((d) => (
+              <option key={d}>{d}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 pt-2">
+          <div className="bg-gray-100 rounded p-2">
+            <div className="text-xs text-gray-500">Settlements</div>
+            <div className="font-bold">{filteredSettlements.length.toLocaleString()}</div>
+          </div>
+          <div className="bg-gray-100 rounded p-2">
+            <div className="text-xs text-gray-500">Houses</div>
+            <div className="font-bold">{totalHouses.toLocaleString()}</div>
+          </div>
+        </div>
+      </div>
+
+      {hoverInfo && (
+        <div
+          className="absolute z-20 bg-white rounded shadow p-3 text-sm pointer-events-none"
+          style={{ left: hoverInfo.x + 12, top: hoverInfo.y + 12 }}
+        >
+          <div className="font-bold">{hoverInfo.object.SETTLEMENT}</div>
+          <div>Region: {hoverInfo.object.REG_NAME}</div>
+          <div>District: {hoverInfo.object.DIST_NAME}</div>
+          <div>Houses: {Number(hoverInfo.object.house_count).toLocaleString()}</div>
+        </div>
+      )}
+
+      <DeckGL
+        initialViewState={{
+          longitude: 45.3,
+          latitude: 5.2,
+          zoom: 5.4,
+          pitch: 0,
+          bearing: 0,
+        }}
+        controller={true}
+        layers={layers as any}
+      >
+        <Map
+          mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_TOKEN}
+          mapStyle="mapbox://styles/mapbox/light-v11"
+        />
+      </DeckGL>
+    </main>
+  );
+}import Image from "next/image";
+
+export default function Home() {
+  return (
+    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
+      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
+        <Image
+          className="dark:invert"
+          src="/next.svg"
+          alt="Next.js logo"
+          width={100}
+          height={20}
+          priority
+        />
+        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
+          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
+            To get started, edit the page.tsx file.
+          </h1>
+          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
+            Looking for a starting point or more instructions? Head over to{" "}
+            <a
+              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
+              className="font-medium text-zinc-950 dark:text-zinc-50"
+            >
+              Templates
+            </a>{" "}
+            or the{" "}
+            <a
+              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
+              className="font-medium text-zinc-950 dark:text-zinc-50"
+            >
+              Learning
+            </a>{" "}
+            center.
+          </p>
+        </div>
+        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
+          <a
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
+            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Image
+              className="dark:invert"
+              src="/vercel.svg"
+              alt="Vercel logomark"
+              width={16}
+              height={16}
+            />
+            Deploy Now
+          </a>
+          <a
+            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
+            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Documentation
+          </a>
+        </div>
+      </main>
+    </div>
+  );
+}
+
