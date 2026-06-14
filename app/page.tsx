@@ -51,6 +51,7 @@ export default function Home() {
   const [selectedTribe, setSelectedTribe] = useState("All");
   const [householdSize, setHouseholdSize] = useState(6.7);
   const [hoverInfo, setHoverInfo] = useState<any>(null);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const [viewState, setViewState] = useState({
     longitude: 45.3,
@@ -104,13 +105,11 @@ export default function Home() {
 
   const tribeBySettlement = useMemo(() => {
     const map = new globalThis.Map<number, TribeRow[]>();
-
     for (const t of tribes) {
       const id = Number(t.OBJECTID);
       if (!map.has(id)) map.set(id, []);
       map.get(id)!.push(t);
     }
-
     return map;
   }, [tribes]);
 
@@ -216,9 +215,147 @@ export default function Home() {
     }),
   ].filter(Boolean);
 
+  const FilterContent = () => (
+    <div className="space-y-4">
+      <h1 className="text-xl font-bold">Somalia House Counts</h1>
+
+      <div className="md:hidden">
+        <div className="font-semibold text-sm mb-2">Regions</div>
+        <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto border rounded p-2">
+          <button
+            className={`px-3 py-1 rounded border text-sm ${
+              selectedRegions.length === 0 ? "bg-black text-white" : "bg-white"
+            }`}
+            onClick={() => {
+              setSelectedRegions([]);
+              setSelectedDistricts([]);
+              setSelectedTribe("All");
+            }}
+          >
+            All
+          </button>
+          {regions.map((r) => (
+            <button
+              key={r}
+              className={`px-3 py-1 rounded border text-sm ${
+                selectedRegions.includes(r) ? "bg-black text-white" : "bg-white"
+              }`}
+              onClick={() => toggleRegion(r)}
+            >
+              {r}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="md:hidden">
+        <div className="font-semibold text-sm mb-2">Districts</div>
+        <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto border rounded p-2">
+          <button
+            className={`px-3 py-1 rounded border text-sm ${
+              selectedDistricts.length === 0 ? "bg-black text-white" : "bg-white"
+            }`}
+            onClick={() => {
+              setSelectedDistricts([]);
+              setSelectedTribe("All");
+            }}
+          >
+            All
+          </button>
+          {districts.map((d) => (
+            <button
+              key={d}
+              className={`px-3 py-1 rounded border text-sm ${
+                selectedDistricts.includes(d) ? "bg-black text-white" : "bg-white"
+              }`}
+              onClick={() => toggleDistrict(d)}
+            >
+              {d}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label className="font-semibold text-sm">Tribe Level</label>
+        <select
+          className="w-full border rounded p-2 mt-1"
+          value={tribeLevel}
+          onChange={(e) => {
+            setTribeLevel(e.target.value);
+            setSelectedTribe("All");
+          }}
+        >
+          <option value="0">Tribe Level 0</option>
+          <option value="1">Tribe Level 1</option>
+          <option value="2">Tribe Level 2</option>
+          <option value="3">Tribe Level 3</option>
+          <option value="4">Tribe Level 4</option>
+          <option value="5">Tribe Level 5</option>
+        </select>
+      </div>
+
+      <div>
+        <div className="font-semibold text-sm mb-2">Tribe Names</div>
+        <div className="space-y-1 max-h-48 overflow-y-auto">
+          {tribeNames.map((name) => (
+            <button
+              key={name}
+              className={`w-full flex items-center gap-2 px-2 py-1 rounded border text-sm ${
+                selectedTribe === name ? "bg-black text-white" : "bg-white"
+              }`}
+              onClick={() => setSelectedTribe(name)}
+            >
+              <span
+                className="inline-block w-3 h-3 rounded-full"
+                style={{
+                  backgroundColor:
+                    name === "All" ? "black" : `rgba(${colorForName(name).join(",")})`,
+                }}
+              />
+              <span>{name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="text-sm font-semibold">
+          Avg Household Size: {householdSize.toFixed(1)}
+        </div>
+        <input
+          type="range"
+          min="2"
+          max="7"
+          step="0.1"
+          value={householdSize}
+          onChange={(e) => setHouseholdSize(Number(e.target.value))}
+          className="w-full"
+        />
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-gray-100 rounded p-2">
+          <div className="text-xs text-gray-500">Settlements</div>
+          <div className="font-bold">{filtered.length.toLocaleString()}</div>
+        </div>
+
+        <div className="bg-gray-100 rounded p-2">
+          <div className="text-xs text-gray-500">Houses</div>
+          <div className="font-bold">{totalHouses.toLocaleString()}</div>
+        </div>
+
+        <div className="bg-gray-100 rounded p-2">
+          <div className="text-xs text-gray-500">Population</div>
+          <div className="font-bold">{estimatedPopulation.toLocaleString()}</div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <main className="h-screen w-screen relative">
-      <div className="absolute top-0 left-0 right-0 z-20 bg-white shadow p-3 space-y-2">
+      <div className="hidden md:block absolute top-0 left-0 right-0 z-20 bg-white shadow p-3 space-y-2">
         <div className="font-bold">Regions</div>
         <div className="flex gap-2 overflow-x-auto pb-1">
           <button
@@ -275,86 +412,33 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="absolute top-36 left-4 z-10 bg-white rounded-xl shadow p-4 w-80 max-h-[78vh] overflow-y-auto space-y-4">
-        <h1 className="text-xl font-bold">Somalia House Counts</h1>
+      <button
+        className="md:hidden absolute top-3 left-3 z-30 bg-white shadow rounded-lg px-4 py-2 font-semibold"
+        onClick={() => setMobileFiltersOpen(true)}
+      >
+        Filters
+      </button>
 
-        <div>
-          <label className="font-semibold text-sm">Tribe Level</label>
-          <select
-            className="w-full border rounded p-2 mt-1"
-            value={tribeLevel}
-            onChange={(e) => {
-              setTribeLevel(e.target.value);
-              setSelectedTribe("All");
-            }}
-          >
-            <option value="0">Tribe Level 0</option>
-            <option value="1">Tribe Level 1</option>
-            <option value="2">Tribe Level 2</option>
-            <option value="3">Tribe Level 3</option>
-            <option value="4">Tribe Level 4</option>
-            <option value="5">Tribe Level 5</option>
-          </select>
-        </div>
-
-        <div>
-          <div className="font-semibold text-sm mb-2">Tribe Names</div>
-          <div className="space-y-1 max-h-48 overflow-y-auto">
-            {tribeNames.map((name) => (
-              <button
-                key={name}
-                className={`w-full flex items-center gap-2 px-2 py-1 rounded border text-sm ${
-                  selectedTribe === name ? "bg-black text-white" : "bg-white"
-                }`}
-                onClick={() => setSelectedTribe(name)}
-              >
-                <span
-                  className="inline-block w-3 h-3 rounded-full"
-                  style={{
-                    backgroundColor:
-                      name === "All"
-                        ? "black"
-                        : `rgba(${colorForName(name).join(",")})`,
-                  }}
-                />
-                <span>{name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <div className="text-sm font-semibold">
-            Avg Household Size: {householdSize.toFixed(1)}
-          </div>
-          <input
-            type="range"
-            min="2"
-            max="7"
-            step="0.1"
-            value={householdSize}
-            onChange={(e) => setHouseholdSize(Number(e.target.value))}
-            className="w-full"
-          />
-        </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          <div className="bg-gray-100 rounded p-2">
-            <div className="text-xs text-gray-500">Settlements</div>
-            <div className="font-bold">{filtered.length.toLocaleString()}</div>
-          </div>
-
-          <div className="bg-gray-100 rounded p-2">
-            <div className="text-xs text-gray-500">Houses</div>
-            <div className="font-bold">{totalHouses.toLocaleString()}</div>
-          </div>
-
-          <div className="bg-gray-100 rounded p-2">
-            <div className="text-xs text-gray-500">Population</div>
-            <div className="font-bold">{estimatedPopulation.toLocaleString()}</div>
-          </div>
-        </div>
+      <div className="hidden md:block absolute top-36 left-4 z-10 bg-white rounded-xl shadow p-4 w-80 max-h-[78vh] overflow-y-auto">
+        <FilterContent />
       </div>
+
+      {mobileFiltersOpen && (
+        <div className="md:hidden absolute inset-0 z-40 bg-black/30">
+          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-4 max-h-[82vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-3">
+              <div className="font-bold text-lg">Filters</div>
+              <button
+                className="text-2xl"
+                onClick={() => setMobileFiltersOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <FilterContent />
+          </div>
+        </div>
+      )}
 
       {hoverInfo && (
         <div
