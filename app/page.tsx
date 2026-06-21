@@ -287,9 +287,8 @@ export default function Home() {
       id: "settlements",
       data: filtered,
       getPosition: (d: Settlement) => [Number(d.X), Number(d.Y)],
-      getRadius: (d: Settlement) =>
-        Math.max(80, Math.sqrt(Number(d.house_count || 0)) * 45),
-      radiusUnits: "meters",
+      getRadius:45,
+      radiusUnits: "pixels",
       getFillColor: (d: Settlement) => colorForName(dominantTribe(Number(d.OBJECTID))),
       getLineColor: [255, 255, 255],
       lineWidthMinPixels: 1,
