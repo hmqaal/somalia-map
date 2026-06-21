@@ -287,7 +287,7 @@ export default function Home() {
       id: "settlements",
       data: filtered,
       getPosition: (d: Settlement) => [Number(d.X), Number(d.Y)],
-      getRadius:45,
+      getRadius:4,
       radiusUnits: "pixels",
       getFillColor: (d: Settlement) => colorForName(dominantTribe(Number(d.OBJECTID))),
       getLineColor: [255, 255, 255],
