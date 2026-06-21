@@ -11,7 +11,6 @@ type Settlement = {
   OBJECTID: number;
   SETTLEMENT: string;
   REG_NAME: string;
-  DIST_NAME: string;
   X: number;
   Y: number;
   house_count: number;
@@ -165,12 +164,28 @@ export default function Home() {
       .Tribe_name;
   };
 
+  const districtToRegion = useMemo(() => {
+    const map = new globalThis.Map<string, string>();
+
+    for (const d of districtCounts) {
+      map.set(clean(d.shapeName), d.REG_NAME);
+    }
+
+    return map;
+  }, [districtCounts]);
+
+  const getSettlementRegion = (s: Settlement) => {
+    return districtToRegion.get(clean(s["shape name"])) || s.REG_NAME;
+  };
+
   const tribeNames = useMemo(() => {
     const names = new Set<string>();
 
     for (const s of settlements) {
+      const actualRegion = getSettlementRegion(s);
+
       const regionOk =
-        selectedRegions.length === 0 || selectedRegions.includes(s.REG_NAME);
+        selectedRegions.length === 0 || selectedRegions.includes(actualRegion);
 
       const districtOk =
         selectedDistricts.length === 0 ||
@@ -188,12 +203,15 @@ export default function Home() {
     selectedDistricts,
     tribeLevel,
     tribeBySettlement,
+    districtToRegion,
   ]);
 
   const filtered = useMemo(() => {
     return settlements.filter((d) => {
+      const actualRegion = getSettlementRegion(d);
+
       const regionOk =
-        selectedRegions.length === 0 || selectedRegions.includes(d.REG_NAME);
+        selectedRegions.length === 0 || selectedRegions.includes(actualRegion);
 
       const districtOk =
         selectedDistricts.length === 0 ||
@@ -211,6 +229,7 @@ export default function Home() {
     selectedTribe,
     tribeLevel,
     tribeBySettlement,
+    districtToRegion,
   ]);
 
   useEffect(() => {
@@ -233,11 +252,6 @@ export default function Home() {
       zoom: Math.max(5, Math.min(11, 8 - Math.log2(maxDelta))),
     }));
   }, [selectedRegions, selectedDistricts, selectedTribe, tribeLevel]);
-
-  const settlementHouses = filtered.reduce(
-    (sum, d) => sum + Number(d.house_count || 0),
-    0
-  );
 
   const adminHouses = useMemo(() => {
     if (selectedDistricts.length > 0) {
@@ -451,19 +465,14 @@ export default function Home() {
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <div className="bg-gray-100 rounded p-2">
           <div className="text-xs text-gray-500">Settlements</div>
           <div className="font-bold">{filtered.length.toLocaleString()}</div>
         </div>
 
         <div className="bg-gray-100 rounded p-2">
-          <div className="text-xs text-gray-500">Settlement Houses</div>
-          <div className="font-bold">{settlementHouses.toLocaleString()}</div>
-        </div>
-
-        <div className="bg-gray-100 rounded p-2">
-          <div className="text-xs text-gray-500">Admin Houses</div>
+          <div className="text-xs text-gray-500">Houses</div>
           <div className="font-bold">{adminHouses.toLocaleString()}</div>
         </div>
       </div>
@@ -574,7 +583,7 @@ export default function Home() {
           </button>
           <div className="font-bold">{districtInfo.shapeName}</div>
           <div>Region: {districtInfo.region}</div>
-          <div>Admin Houses: {districtInfo.houses.toLocaleString()}</div>
+          <div>Houses: {districtInfo.houses.toLocaleString()}</div>
           <div>
             Est. Population:{" "}
             {Math.round(districtInfo.houses * householdSize).toLocaleString()}
@@ -588,13 +597,9 @@ export default function Home() {
           style={{ left: hoverInfo.x + 12, top: hoverInfo.y + 12 }}
         >
           <div className="font-bold">{hoverInfo.object.SETTLEMENT}</div>
-          <div>Region: {hoverInfo.object.REG_NAME}</div>
-          <div>District: {hoverInfo.object.DIST_NAME}</div>
-          <div>Shape: {hoverInfo.object["shape name"]}</div>
-          <div>
-            Settlement Houses:{" "}
-            {Number(hoverInfo.object.house_count).toLocaleString()}
-          </div>
+          <div>Region: {getSettlementRegion(hoverInfo.object)}</div>
+          <div>District: {hoverInfo.object["shape name"]}</div>
+          <div>Houses: {Number(hoverInfo.object.house_count).toLocaleString()}</div>
           <div>
             Est. Population:{" "}
             {Math.round(
