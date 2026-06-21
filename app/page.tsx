@@ -36,6 +36,10 @@ type RegionRow = {
   house_count: number;
 };
 
+function clean(value: any) {
+  return String(value || "").trim().toUpperCase();
+}
+
 function colorForName(name: string): [number, number, number, number] {
   if (!name || name.toLowerCase() === "unknown") return [130, 130, 130, 150];
 
@@ -93,7 +97,10 @@ export default function Home() {
       complete: (result) => {
         setTribes(
           (result.data as TribeRow[]).filter(
-            (d) => d.Tribe_name && d.tribe_level !== null && d.tribe_level !== undefined
+            (d) =>
+              d.Tribe_name &&
+              d.tribe_level !== null &&
+              d.tribe_level !== undefined
           )
         );
       },
@@ -120,37 +127,32 @@ export default function Home() {
       .then(setAdm2);
   }, []);
 
-  const regions = useMemo(
-    () => Array.from(new Set(settlements.map((d) => d.REG_NAME).filter(Boolean))).sort(),
-    [settlements]
-  );
+  const regions = useMemo(() => {
+    return Array.from(
+      new Set(districtCounts.map((d) => d.REG_NAME).filter(Boolean))
+    ).sort();
+  }, [districtCounts]);
 
   const districts = useMemo(() => {
     const rows =
       selectedRegions.length === 0
-        ? settlements
-        : settlements.filter((d) => selectedRegions.includes(d.REG_NAME));
+        ? districtCounts
+        : districtCounts.filter((d) => selectedRegions.includes(d.REG_NAME));
 
-    return Array.from(new Set(rows.map((d) => d.DIST_NAME).filter(Boolean))).sort();
-  }, [settlements, selectedRegions]);
+    return Array.from(new Set(rows.map((d) => d.shapeName).filter(Boolean))).sort();
+  }, [districtCounts, selectedRegions]);
 
   const tribeBySettlement = useMemo(() => {
     const map = new globalThis.Map<number, TribeRow[]>();
+
     for (const t of tribes) {
       const id = Number(t.OBJECTID);
       if (!map.has(id)) map.set(id, []);
       map.get(id)!.push(t);
     }
+
     return map;
   }, [tribes]);
-
-  const districtCountByShape = useMemo(() => {
-    const map = new globalThis.Map<string, DistrictRow>();
-    for (const d of districtCounts) {
-      map.set(String(d.shapeName).trim().toUpperCase(), d);
-    }
-    return map;
-  }, [districtCounts]);
 
   const dominantTribe = (objectId: number) => {
     const rows = (tribeBySettlement.get(Number(objectId)) || []).filter(
@@ -159,33 +161,57 @@ export default function Home() {
 
     if (rows.length === 0) return "Unknown";
 
-    return rows.sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0))[0].Tribe_name;
+    return rows.sort((a, b) => Number(b.percent || 0) - Number(a.percent || 0))[0]
+      .Tribe_name;
   };
 
   const tribeNames = useMemo(() => {
     const names = new Set<string>();
 
     for (const s of settlements) {
-      const regionOk = selectedRegions.length === 0 || selectedRegions.includes(s.REG_NAME);
-      const districtOk = selectedDistricts.length === 0 || selectedDistricts.includes(s.DIST_NAME);
+      const regionOk =
+        selectedRegions.length === 0 || selectedRegions.includes(s.REG_NAME);
+
+      const districtOk =
+        selectedDistricts.length === 0 ||
+        selectedDistricts.includes(clean(s["shape name"]));
+
       if (!regionOk || !districtOk) continue;
 
       names.add(dominantTribe(Number(s.OBJECTID)));
     }
 
     return ["All", ...Array.from(names).sort()];
-  }, [settlements, selectedRegions, selectedDistricts, tribeLevel, tribeBySettlement]);
+  }, [
+    settlements,
+    selectedRegions,
+    selectedDistricts,
+    tribeLevel,
+    tribeBySettlement,
+  ]);
 
   const filtered = useMemo(() => {
     return settlements.filter((d) => {
-      const regionOk = selectedRegions.length === 0 || selectedRegions.includes(d.REG_NAME);
-      const districtOk = selectedDistricts.length === 0 || selectedDistricts.includes(d.DIST_NAME);
+      const regionOk =
+        selectedRegions.length === 0 || selectedRegions.includes(d.REG_NAME);
+
+      const districtOk =
+        selectedDistricts.length === 0 ||
+        selectedDistricts.includes(clean(d["shape name"]));
+
       const tribe = dominantTribe(Number(d.OBJECTID));
       const tribeOk = selectedTribe === "All" || tribe === selectedTribe;
 
       return regionOk && districtOk && tribeOk;
     });
-  }, [settlements, selectedRegions, selectedDistricts, selectedTribe, tribeLevel, tribeBySettlement]);
+  }, [
+    settlements,
+    selectedRegions,
+    selectedDistricts,
+    selectedTribe,
+    tribeLevel,
+    tribeBySettlement,
+  ]);
 
   useEffect(() => {
     if (filtered.length === 0) return;
@@ -208,24 +234,15 @@ export default function Home() {
     }));
   }, [selectedRegions, selectedDistricts, selectedTribe, tribeLevel]);
 
-  const settlementHouses = filtered.reduce((sum, d) => sum + Number(d.house_count || 0), 0);
-
-  const selectedShapeNames = useMemo(() => {
-    const shapes = new Set<string>();
-
-    for (const s of settlements) {
-      if (selectedDistricts.length > 0 && selectedDistricts.includes(s.DIST_NAME)) {
-        if (s["shape name"]) shapes.add(String(s["shape name"]).trim().toUpperCase());
-      }
-    }
-
-    return shapes;
-  }, [settlements, selectedDistricts]);
+  const settlementHouses = filtered.reduce(
+    (sum, d) => sum + Number(d.house_count || 0),
+    0
+  );
 
   const adminHouses = useMemo(() => {
     if (selectedDistricts.length > 0) {
       return districtCounts
-        .filter((d) => selectedShapeNames.has(String(d.shapeName).trim().toUpperCase()))
+        .filter((d) => selectedDistricts.includes(clean(d.shapeName)))
         .reduce((sum, d) => sum + Number(d.house_count || 0), 0);
     }
 
@@ -236,9 +253,19 @@ export default function Home() {
     }
 
     return regionCounts.reduce((sum, r) => sum + Number(r.house_count || 0), 0);
-  }, [selectedDistricts, selectedRegions, selectedShapeNames, districtCounts, regionCounts]);
+  }, [selectedDistricts, selectedRegions, districtCounts, regionCounts]);
 
   const estimatedPopulation = Math.round(adminHouses * householdSize);
+
+  const districtCountByShape = useMemo(() => {
+    const map = new globalThis.Map<string, DistrictRow>();
+
+    for (const d of districtCounts) {
+      map.set(clean(d.shapeName), d);
+    }
+
+    return map;
+  }, [districtCounts]);
 
   const toggleRegion = (r: string) => {
     setSelectedRegions((prev) =>
@@ -249,8 +276,9 @@ export default function Home() {
   };
 
   const toggleDistrict = (d: string) => {
+    const shape = clean(d);
     setSelectedDistricts((prev) =>
-      prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]
+      prev.includes(shape) ? prev.filter((x) => x !== shape) : [...prev, shape]
     );
     setSelectedTribe("All");
   };
@@ -268,7 +296,7 @@ export default function Home() {
         lineWidthMinPixels: 1,
         pickable: true,
         onClick: (info: any) => {
-          const shapeName = String(info.object?.properties?.shapeName || "").trim().toUpperCase();
+          const shapeName = clean(info.object?.properties?.shapeName);
           const row = districtCountByShape.get(shapeName);
 
           if (row) {
@@ -287,9 +315,10 @@ export default function Home() {
       id: "settlements",
       data: filtered,
       getPosition: (d: Settlement) => [Number(d.X), Number(d.Y)],
-      getRadius:1,
+      getRadius: 4,
       radiusUnits: "pixels",
-      getFillColor: (d: Settlement) => colorForName(dominantTribe(Number(d.OBJECTID))),
+      getFillColor: (d: Settlement) =>
+        colorForName(dominantTribe(Number(d.OBJECTID))),
       getLineColor: [255, 255, 255],
       lineWidthMinPixels: 1,
       pickable: true,
@@ -316,6 +345,7 @@ export default function Home() {
           >
             All
           </button>
+
           {regions.map((r) => (
             <button
               key={r}
@@ -344,11 +374,14 @@ export default function Home() {
           >
             All
           </button>
+
           {districts.map((d) => (
             <button
               key={d}
               className={`px-3 py-1 rounded border text-sm ${
-                selectedDistricts.includes(d) ? "bg-black text-white" : "bg-white"
+                selectedDistricts.includes(clean(d))
+                  ? "bg-black text-white"
+                  : "bg-white"
               }`}
               onClick={() => toggleDistrict(d)}
             >
@@ -392,7 +425,9 @@ export default function Home() {
                 className="inline-block w-3 h-3 rounded-full"
                 style={{
                   backgroundColor:
-                    name === "All" ? "black" : `rgba(${colorForName(name).join(",")})`,
+                    name === "All"
+                      ? "black"
+                      : `rgba(${colorForName(name).join(",")})`,
                 }}
               />
               <span>{name}</span>
@@ -489,7 +524,9 @@ export default function Home() {
             <button
               key={d}
               className={`px-3 py-1 rounded border text-sm whitespace-nowrap ${
-                selectedDistricts.includes(d) ? "bg-black text-white" : "bg-white"
+                selectedDistricts.includes(clean(d))
+                  ? "bg-black text-white"
+                  : "bg-white"
               }`}
               onClick={() => toggleDistrict(d)}
             >
@@ -515,7 +552,10 @@ export default function Home() {
           <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl p-4 max-h-[82vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-3">
               <div className="font-bold text-lg">Filters</div>
-              <button className="text-2xl" onClick={() => setMobileFiltersOpen(false)}>
+              <button
+                className="text-2xl"
+                onClick={() => setMobileFiltersOpen(false)}
+              >
                 ×
               </button>
             </div>
@@ -550,10 +590,16 @@ export default function Home() {
           <div className="font-bold">{hoverInfo.object.SETTLEMENT}</div>
           <div>Region: {hoverInfo.object.REG_NAME}</div>
           <div>District: {hoverInfo.object.DIST_NAME}</div>
-          <div>Settlement Houses: {Number(hoverInfo.object.house_count).toLocaleString()}</div>
+          <div>Shape: {hoverInfo.object["shape name"]}</div>
+          <div>
+            Settlement Houses:{" "}
+            {Number(hoverInfo.object.house_count).toLocaleString()}
+          </div>
           <div>
             Est. Population:{" "}
-            {Math.round(Number(hoverInfo.object.house_count) * householdSize).toLocaleString()}
+            {Math.round(
+              Number(hoverInfo.object.house_count) * householdSize
+            ).toLocaleString()}
           </div>
           <div>Tribe: {dominantTribe(Number(hoverInfo.object.OBJECTID))}</div>
         </div>
